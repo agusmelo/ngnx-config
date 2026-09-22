@@ -1,0 +1,47 @@
+# Proxy único del VPS: el único servicio con 80/443 publicados al host.
+# Vive en su propia carpeta, fuera de taller y de Acompañada — ninguno de
+# los dos proyectos sabe que este proxy existe, ni sabe del otro. Cada uno
+# solo se suma a la red externa `edge` con un container_name fijo; el mapeo
+# dominio → contenedor vive acá, no en ninguno de los dos repos.
+#
+# La red se crea una sola vez, antes del primer `docker compose up`:
+#   docker network create edge
+#
+# Dominios hardcodeados en conf.d/*.conf a propósito, no parametrizados:
+# ya están decididos (a diferencia de cuando armamos esto la primera vez sin
+# dominio todavía), así que la variable extra era complejidad sin beneficio.
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d:ro
+      - certbot-www:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    networks:
+      - edge
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-www:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    # Sin comando fijo: se invoca a mano (o desde cron para `renew`, ver
+    # MIGRACION.md) con `docker compose run --rm certbot ...`.
+    entrypoint: ["/bin/true"]
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  certbot-www:
+  certbot-certs:
